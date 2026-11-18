@@ -1,5 +1,5 @@
 // Pop Pop Play offline cache. CACHE changes with every version, so phones pick up updates.
-const CACHE = "poppop-1.4.7-7";
+const CACHE = "poppop-1.4.8-8";
 const FILES = ["./", "index.html", "manifest.webmanifest", "icon-180.png", "icon-192.png", "icon-512.png", "icon-maskable-512.png"];
 
 self.addEventListener("install", e => {

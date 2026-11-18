@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="theme-color" content="#8fd3ff">
 <!-- App version: android/build.sh reads both. Raise app-build by 1 for every Play Store update. -->
-<meta name="app-version" content="1.4.7">
-<meta name="app-build" content="7">
+<meta name="app-version" content="1.4.8">
+<meta name="app-build" content="8">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <link rel="manifest" href="manifest.webmanifest">
@@ -157,6 +157,13 @@
   #gear { position:absolute; z-index:2; top:calc(env(safe-area-inset-top) + 12px); right:16px; width:60px; height:60px;
           border:0; border-radius:50%; background:rgba(255,255,255,.9); font-size:30px; cursor:pointer;
           box-shadow:0 4px 0 var(--shadow); }
+  #gear.alert::after { content:""; position:absolute; top:4px; right:4px; width:16px; height:16px; border-radius:50%;
+                       background:#ff3b30; border:2px solid #fff; }
+  .seg button.test { background:#2f7bff; color:#fff; font-weight:700; }
+  .help { margin:4px 0 6px; padding:12px 16px; border-radius:18px; background:#fff6d6; font-size:clamp(15px,3.6vw,18px);
+          line-height:1.45; }
+  .help.ok { background:#dff7e3; }
+  .help ol { margin:6px 0 8px; padding-left:22px; }
   #exitBtn { position:absolute; z-index:2; top:calc(env(safe-area-inset-top) + 12px); left:16px; width:60px; height:60px;
              border:0; border-radius:50%; background:rgba(255,255,255,.9); font-size:30px; cursor:pointer;
              box-shadow:0 4px 0 var(--shadow); font-family:"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif; }
@@ -267,7 +274,9 @@
   <div class="setwrap">
     <h2>⚙️ Settings</h2>
     <div class="row"><span>🗣️ Voice</span>
-      <div class="seg" data-key="voice"><button data-v="1">On</button><button data-v="0">Off</button></div></div>
+      <div class="seg" data-key="voice"><button data-v="1">On</button><button data-v="0">Off</button>
+        <button type="button" id="voiceTest" class="test">▶ Test</button></div></div>
+    <div id="voiceHelp" class="help" hidden></div>
     <div class="row"><span>🎵 Music <b id="musicPct"></b></span>
       <input type="range" id="musicVol" class="slider" min="0" max="100" step="5" aria-label="Music volume"></div>
     <div class="row"><span>🔊 Pop sounds</span>
@@ -738,28 +747,100 @@
   // Inside the Android app, speech goes through the phone's own text-to-speech engine.
   const bridge = window.AndroidApp || null;
   const canSpeak = !bridge && "speechSynthesis" in window;
+  const IS_IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+                 (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);   // iPads report as a Mac
+  const IS_ANDROID = /Android/i.test(navigator.userAgent);
+  // Apple's joke voices (bubbles, bells, whispering…) are English too: never pick those.
+  const NOVELTY = /albert|bad news|bahh|bells|boing|bubbles|cellos|deranged|good news|hysterical|jester|organ|superstar|trinoids|whisper|wobble|zarvox/i;
+  const NICE = /samantha|karen|daniel|moira|tessa|google us english|microsoft (aria|jenny|zira)/i;
   let voice = null;
   function loadVoices() {
-    const en = speechSynthesis.getVoices().filter(v => /^en/i.test(v.lang));
-    // Prefer on-device voices so speech works with no internet.
-    voice = en.find(v => v.localService && /en[-_]US/i.test(v.lang)) || en.find(v => v.localService) || en[0] || null;
+    const en = speechSynthesis.getVoices().filter(v => /^en/i.test(v.lang) && !NOVELTY.test(v.name));
+    const us = en.filter(v => /en[-_]US/i.test(v.lang));
+    // A well-known clear voice first; on iPhone otherwise leave it to the system's own English voice,
+    // which always works. Elsewhere prefer on-device voices so speech works with no internet.
+    voice = us.find(v => NICE.test(v.name)) || en.find(v => NICE.test(v.name)) ||
+            (IS_IOS ? null : us.find(v => v.localService) || en.find(v => v.localService) || en[0]) || null;
   }
   if (canSpeak) { loadVoices(); speechSynthesis.onvoiceschanged = loadVoices; }
+
+  // iPhone/iPad only allow speech once a finger has lifted off the screen, but pops happen as it lands.
+  // So the first tap or click anywhere speaks a silent word, which unlocks the voice for the pops.
+  let speechUnlocked = false;
+  function unlockSpeech() {
+    if (!canSpeak || speechUnlocked) return;
+    speechUnlocked = true;
+    const u = new SpeechSynthesisUtterance(" ");
+    u.volume = 0;
+    speechSynthesis.speak(u);
+  }
+
+  // Voice check. A word that never starts counts as a miss; after two, the ⚙️ button gets a red dot and
+  // Settings shows how to fix the voice on this kind of device. Nothing interrupts the child.
+  let voiceMisses = 0, current = null;
+  function voiceMiss() {
+    voiceMisses++;
+    if (voiceMisses >= 2) $("#gear").classList.add("alert");
+  }
+  function voiceOk() { voiceMisses = 0; $("#gear").classList.remove("alert"); }
+
   function stopSpeech() {
     if (bridge) bridge.stop();
     else if (canSpeak) speechSynthesis.cancel();
   }
-  function say(text) {
-    if (!settings.voice || !text) return;
+  /** Speaks a word. done(true/false), if given, says whether the voice was heard (for the Test button). */
+  function say(text, onResult) {
+    if ((!settings.voice && !onResult) || !text) return;
+    let reported = false;
+    const done = onResult && (ok => { if (!reported) { reported = true; onResult(ok); } });
     Music.duck();
-    if (bridge) { bridge.speak(text); return; }
-    if (!canSpeak) return;
-    speechSynthesis.cancel();
+    if (bridge) {
+      bridge.speak(text);
+      const ok = !bridge.voiceReady || bridge.voiceReady();
+      if (ok) voiceOk(); else voiceMiss();
+      if (done) done(ok);
+      return;
+    }
+    if (!canSpeak) { voiceMiss(); if (done) done(false); return; }
     const u = new SpeechSynthesisUtterance(text);
     if (voice) u.voice = voice;
     u.lang = voice ? voice.lang : "en-US";
     u.rate = 0.85; u.pitch = 1.15;
-    speechSynthesis.speak(u);
+    let started = false;
+    u.onstart = () => { started = true; voiceOk(); if (done) done(true); };
+    current = u;                                 // keep a reference: some browsers drop unreferenced words
+    setTimeout(() => { if (!started && current === u) { voiceMiss(); if (done) done(false); } }, 2500);
+    // Safari loses a word spoken straight after cancelling another, so give it a moment.
+    const busy = speechSynthesis.speaking || speechSynthesis.pending;
+    if (busy) speechSynthesis.cancel();
+    speechSynthesis.resume();                    // iOS can leave speech paused after the app was in the background
+    if (busy) setTimeout(() => speechSynthesis.speak(u), 80); else speechSynthesis.speak(u);
+  }
+
+  /** Step-by-step voice setup for this kind of device. */
+  function voiceHelpHTML() {
+    if (bridge) return "<b>No voice? Set up the phone's voice:</b><ol>" +
+      "<li>Turn the media volume up.</li>" +
+      "<li>Tap <b>Open voice settings</b> below. Choose <b>Speech Services by Google</b> as the engine.</li>" +
+      "<li>Tap the ⚙️ next to it → <b>Install voice data</b> → <b>English (United States)</b> → download.</li>" +
+      "<li>Come back and tap <b>▶ Test</b>.</li></ol>" +
+      '<button type="button" id="voiceSettings" class="holdbtn">Open voice settings</button>';
+    if (!("speechSynthesis" in window)) return "<b>This browser can't speak words.</b> " +
+      "Open Pop Pop Play in <b>Safari</b> on iPhone/iPad, or <b>Chrome</b> on Android or a computer.";
+    if (IS_IOS) return "<b>No voice on iPhone/iPad? Try these:</b><ol>" +
+      "<li>Turn <b>Silent mode off</b> (the switch or Action button on the side) and turn the volume up.</li>" +
+      "<li>Open <b>Settings → Accessibility → Spoken Content → Voices → English</b> and download a voice, " +
+      "such as <b>Samantha</b>.</li>" +
+      "<li>Close Pop Pop Play fully (swipe it away), open it again and tap <b>▶ Test</b>.</li></ol>";
+    if (IS_ANDROID) return "<b>No voice on Android? Try these:</b><ol>" +
+      "<li>Turn the media volume up.</li>" +
+      "<li>Open phone <b>Settings</b>, search <b>Text-to-speech</b>, choose <b>Speech Services by Google</b>.</li>" +
+      "<li>Tap the ⚙️ next to it → <b>Install voice data</b> → <b>English (United States)</b>.</li>" +
+      "<li>Close the browser tab, open Pop Pop Play again and tap <b>▶ Test</b>.</li></ol>";
+    return "<b>No voice? Try these:</b><ol><li>Check the computer's sound is on and turned up.</li>" +
+      "<li>Make sure an English voice is installed (Windows: Settings → Time &amp; language → Speech; " +
+      "Mac: System Settings → Accessibility → Spoken Content).</li>" +
+      "<li>Reload the page and tap <b>▶ Test</b>.</li></ol>";
   }
 
   // ================= item builders =================
@@ -1195,6 +1276,17 @@
     $("#setBest").textContent = Number(store(bestKey)) || 0;
     $("#musicVol").value = settings.musicVol;
     $("#musicPct").textContent = settings.musicVol ? settings.musicVol + "%" : "Off";
+    if (voiceMisses >= 2) showVoiceHelp(false);  // words didn't play during the game: show the fix right away
+  }
+  /** ok = true: "voice works"; false: the setup steps for this device. */
+  function showVoiceHelp(ok) {
+    const box = $("#voiceHelp");
+    box.hidden = false;
+    box.classList.toggle("ok", ok);
+    box.innerHTML = ok ? "✅ <b>The voice works.</b> You should have heard “Hello! Pop pop!”. " +
+                         "If you didn't, turn the volume up (and Silent mode off on iPhone)." : voiceHelpHTML();
+    const open = $("#voiceSettings");
+    if (open) open.addEventListener("click", () => bridge.openVoiceSettings());
   }
   function openSettings() { renderSettings(); show("settings"); }
   function closeSettings() { refreshMenu(); show("menu"); }
@@ -1266,7 +1358,7 @@
   $("#setDone").addEventListener("click", closeSettings);
   document.querySelectorAll(".seg").forEach(seg => seg.addEventListener("click", e => {
     const b = e.target.closest("button");
-    if (!b) return;
+    if (!b || b.dataset.v === undefined) return;   // e.g. the voice ▶ Test button
     settings[seg.dataset.key] = Number(b.dataset.v);
     saveSettings();
     renderSettings();
@@ -1280,6 +1372,13 @@
     Music.setVolume();
   });
   musicVol.addEventListener("change", saveSettings);
+  // Voice test: speaks inside the tap (which also unlocks speech on iPhone) and shows the result.
+  $("#voiceTest").addEventListener("click", () => {
+    const box = $("#voiceHelp");
+    box.hidden = false; box.classList.remove("ok"); box.textContent = "Listening…";
+    say("Hello! Pop pop!", showVoiceHelp);
+  });
+
   // Link to our website for grown-ups. A child can't open it with a tap: it takes a 1.5 second hold.
   // The Android app opens it in the phone's browser. In a browser, a tab opened at the end of a hold
   // gets blocked as a pop-up, so the hold shows a real link for a few seconds instead.
@@ -1338,7 +1437,7 @@
   });
   // Browsers only allow sound after a tap. On touch screens a finger going down doesn't count,
   // only lifting it does, so listen to all of these. Music.start() does nothing once playing.
-  const unlockSound = () => { audio(); Music.start(); };
+  const unlockSound = () => { audio(); unlockSpeech(); Music.start(); };
   ["pointerup", "touchend", "click", "keydown"].forEach(ev =>
     document.addEventListener(ev, unlockSound, { passive: true }));
   if (bridge) Music.start(); // the Android app allows sound straight away
