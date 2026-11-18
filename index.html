@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="theme-color" content="#8fd3ff">
 <!-- App version: android/build.sh reads both. Raise app-build by 1 for every Play Store update. -->
-<meta name="app-version" content="1.4.6">
-<meta name="app-build" content="6">
+<meta name="app-version" content="1.4.7">
+<meta name="app-build" content="7">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <link rel="manifest" href="manifest.webmanifest">
@@ -67,7 +67,12 @@
                font-family:"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif; }
   .tile .lbl { font-size:clamp(14px,3.4vw,24px); font-weight:700; }
   .tile .sub { font-size:clamp(11px,2.6vw,16px); opacity:.75; min-height:1em; }
-  #fs { position:relative; overflow:hidden; }
+  #fs, .holdbtn { position:relative; overflow:hidden; }
+  .holdbtn { font:inherit; font-size:clamp(15px,3.6vw,19px); border:0; border-radius:999px; padding:8px 16px;
+             background:#eef3f8; cursor:pointer; color:var(--ink); text-decoration:none; }
+  .holdbtn::after { content:""; position:absolute; left:0; bottom:0; height:5px; width:100%; background:#2f7bff;
+                    transform:scaleX(0); transform-origin:left; }
+  .holdbtn.holding::after { transform:scaleX(1); transition:transform 1.5s linear; }
   #fs::after { content:""; position:absolute; left:0; bottom:0; height:5px; width:100%; background:#ff6b9d;
                transform:scaleX(0); transform-origin:left; }
   #fs.holding::after { transform:scaleX(1); transition:transform 1.2s linear; }
@@ -176,7 +181,7 @@
          padding:14px 0; border-bottom:2px dashed #e6eef5; font-size:clamp(17px,4vw,22px); }
   .seg { display:flex; gap:6px; flex-wrap:wrap; }
   .seg button, #resetBest { font:inherit; font-size:clamp(15px,3.6vw,19px); border:0; border-radius:999px; padding:8px 16px;
-                            background:#eef3f8; cursor:pointer; color:var(--ink); }
+                            background:#eef3f8; cursor:pointer; color:var(--ink); text-decoration:none; }
   .seg button.on { background:#ff6b9d; color:#fff; font-weight:700; }
   .done { display:block; margin:20px auto 0; font:inherit; font-size:clamp(22px,5vw,30px); border:0; border-radius:999px;
           padding:10px 34px; background:#2f7bff; color:#fff; cursor:pointer; box-shadow:0 5px 0 var(--shadow); }
@@ -274,6 +279,8 @@
     <div class="row"><span>🏠 Back to menu</span>
       <div class="seg" data-key="homeTap"><button data-v="0">Hold (safer)</button><button data-v="1">Tap</button></div></div>
     <div class="row"><span>🏆 Race best: <b id="setBest">0</b></span><button id="resetBest">Reset</button></div>
+    <div class="row"><span>📰 More from us</span><button id="siteBtn" class="holdbtn">Hold: PH Trend Watch</button>
+      <a id="siteLink" class="holdbtn" href="https://phtrendwatch.world/" target="_blank" rel="noopener" hidden>Open PH Trend Watch ↗</a></div>
     <button id="setDone" class="done">◀ Back</button>
     <div class="ver" id="ver"></div>
   </div>
@@ -1273,6 +1280,24 @@
     Music.setVolume();
   });
   musicVol.addEventListener("change", saveSettings);
+  // Link to our website for grown-ups. A child can't open it with a tap: it takes a 1.5 second hold.
+  // The Android app opens it in the phone's browser. In a browser, a tab opened at the end of a hold
+  // gets blocked as a pop-up, so the hold shows a real link for a few seconds instead.
+  const siteBtn = $("#siteBtn"), siteLink = $("#siteLink");
+  let siteHold = 0, siteHide = 0;
+  const showSiteBtn = () => { siteLink.hidden = true; siteBtn.hidden = false; };
+  siteBtn.addEventListener("pointerdown", () => {
+    siteBtn.classList.add("holding");
+    siteHold = setTimeout(() => {
+      siteBtn.classList.remove("holding");
+      if (bridge && bridge.openSite) { bridge.openSite(); return; }
+      siteBtn.hidden = true; siteLink.hidden = false;
+      clearTimeout(siteHide); siteHide = setTimeout(showSiteBtn, 6000);
+    }, 1500);
+  });
+  siteLink.addEventListener("click", () => setTimeout(showSiteBtn, 300));
+  ["pointerup", "pointerleave", "pointercancel"].forEach(ev =>
+    siteBtn.addEventListener(ev, () => { clearTimeout(siteHold); siteBtn.classList.remove("holding"); }));
   $("#resetBest").addEventListener("click", () => {
     if (confirm("Reset the best race score to 0?")) { store(bestKey, "0"); renderSettings(); }
   });
