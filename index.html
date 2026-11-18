@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="theme-color" content="#8fd3ff">
 <!-- App version: android/build.sh reads both. Raise app-build by 1 for every Play Store update. -->
-<meta name="app-version" content="1.4">
-<meta name="app-build" content="5">
+<meta name="app-version" content="1.4.6">
+<meta name="app-build" content="6">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <link rel="manifest" href="manifest.webmanifest">
@@ -800,9 +800,12 @@
     const edge = color === "#ffffff" ? ' stroke="#c9d6e3" stroke-width="2"' : "";
     return '<svg viewBox="0 0 120 72">' +
       '<ellipse cx="60" cy="68" rx="50" ry="4" fill="rgba(0,0,0,.12)"/>' +
+      // Body and windows are mirrored so the long hood and sloped windscreen sit at the front (right),
+      // next to the headlight. Unmirrored, the shape read as a car facing left, so cars looked to reverse.
+      '<g transform="translate(122 0) scale(-1 1)">' +
       '<path d="M8 50Q6 36 20 34L34 33 46 16Q49 12 55 12H80Q86 12 90 17L102 33Q114 35 114 46V52Q114 56 110 56H12Q8 56 8 50Z" fill="' +
         color + '"' + edge + "/>" +
-      '<path d="M51 18 43 32H64V18Z M70 18V32H96L86 18Z" fill="#bfe6ff"/>' +
+      '<path d="M51 18 43 32H64V18Z M70 18V32H96L86 18Z" fill="#bfe6ff"/></g>' +
       '<rect x="107" y="38" width="7" height="6" rx="2" fill="#ffe680"/>' +
       '<rect x="8" y="38" width="5" height="6" rx="2" fill="#ff5a5a"/>' +
       '<path d="M20 40H100" stroke="#fff" stroke-width="3" stroke-linecap="round" opacity=".35"/>' +
