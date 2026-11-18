@@ -86,6 +86,8 @@
   .bubble { border-radius:50%; display:flex; align-items:center; justify-content:center; pointer-events:auto; }
   .bubble.solid { color:#fff; font-weight:800; text-shadow:0 4px 0 rgba(0,0,0,.18);
                   box-shadow:inset -10px -12px 0 rgba(0,0,0,.12), inset 10px 12px 0 rgba(255,255,255,.35), 0 6px 10px rgba(0,0,0,.1); }
+  .bubble .badge { position:absolute; right:-4%; bottom:-4%; width:44%; height:44%; display:flex; align-items:center;
+                   justify-content:center; background:#fff; border-radius:50%; box-shadow:0 3px 0 var(--shadow); line-height:1; }
   .bubble.soap { border:3px solid rgba(255,255,255,.95);
                  background:radial-gradient(circle at 30% 28%, rgba(255,255,255,.95) 0 9%, rgba(255,255,255,.25) 22%, rgba(170,215,255,.3) 70%, rgba(255,255,255,.75));
                  font-family:"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif; }
@@ -384,7 +386,8 @@
 
   const JOBS = [
     { e: "👩‍🚒", name: "firefighter" }, { e: "👮", name: "police officer" },
-    { e: "👨‍⚕️", name: "doctor" },      { e: "👩‍⚕️", name: "nurse" },
+    // Doctor and nurse share one emoji, so each gets its tool as a badge: stethoscope and bandage.
+    { e: "👩‍⚕️", name: "doctor", badge: "🩺" }, { e: "👨‍⚕️", name: "nurse", badge: "🩹" },
     { e: "👩‍🏫", name: "teacher" },     { e: "👨‍🍳", name: "chef" },
     { e: "👩‍🌾", name: "farmer" },      { e: "👨‍🚀", name: "astronaut" },
     { e: "👩‍🔧", name: "mechanic" },    { e: "👨‍🎨", name: "artist" },
@@ -782,10 +785,13 @@
       w: d, h: d, color, speech, label, sfx: "bloop", key: text,
     };
   }
-  function soapBubble(emoji, speech, label) {
+  // badge: an optional small emoji in the corner, e.g. the tool that tells a doctor from a nurse.
+  function soapBubble(emoji, speech, label, badge) {
     const d = S * 1.15;
+    const extra = badge ? '<span class="badge" style="font-size:' + (d * 0.3) + 'px">' + badge + "</span>" : "";
     return {
-      html: '<div class="bubble soap" style="width:100%;height:100%;font-size:' + (d * 0.55) + 'px">' + emoji + "</div>",
+      html: '<div class="bubble soap" style="position:relative;width:100%;height:100%;font-size:' + (d * 0.55) + 'px">' +
+            emoji + extra + "</div>",
       w: d, h: d, color: pick(BRIGHT), speech, label, sfx: "bloop", key: emoji,
     };
   }
@@ -868,7 +874,7 @@
     family: { motion: "float", max: 5, speed: 9, gap: [500, 1200],
       make: deckMaker(FAMILY, f => f.e, f => soapBubble(f.e, f.name, cap(f.name))) },
     jobs: { motion: "float", max: 5, speed: 9, gap: [500, 1200],
-      make: deckMaker(JOBS, j => j.e, j => soapBubble(j.e, j.name, cap(j.name))) },
+      make: deckMaker(JOBS, j => j.e, j => soapBubble(j.e, j.name, cap(j.name), j.badge)) },
     flags: { motion: "float", max: 4, speed: 10, gap: [700, 1400],
       make: deckMaker(FLAGS, f => f.name, flagCard) },
     capitals: { motion: "float", max: 4, speed: 12, gap: [900, 1700],
