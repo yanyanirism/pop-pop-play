@@ -1,0 +1,1318 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#8fd3ff">
+<!-- App version: android/build.sh reads both. Raise app-build by 1 for every Play Store update. -->
+<meta name="app-version" content="1.4">
+<meta name="app-build" content="5">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<meta name="apple-mobile-web-app-title" content="Pop Pop">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Pop Pop Play</title>
+<style>
+  :root { --ink:#2b2d42; --shadow:rgba(0,0,0,.12); }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html, body {
+    margin:0; height:100%; overflow:hidden; overscroll-behavior:none;
+    touch-action:none; user-select:none; -webkit-user-select:none; -webkit-touch-callout:none;
+  }
+  body {
+    font-family:"Comic Sans MS","Chalkboard SE","Trebuchet MS",system-ui,sans-serif;
+    background:linear-gradient(#8fd3ff, #d9f1ff 70%, #e6ffd6);
+    color:var(--ink);
+  }
+  .screen { position:fixed; inset:0; display:none; }
+  .screen.on { display:block; }
+
+  /* ---------- clouds ---------- */
+  .cloud { position:absolute; width:180px; height:56px; background:#fff; border-radius:60px; opacity:.85;
+           animation:drift linear infinite; pointer-events:none; }
+  .cloud::before, .cloud::after { content:""; position:absolute; background:#fff; border-radius:50%; }
+  .cloud::before { width:80px; height:80px; left:28px; top:-40px; }
+  .cloud::after  { width:100px; height:100px; left:72px; top:-56px; }
+  @keyframes drift { from { transform:translateX(-260px); } to { transform:translateX(calc(100vw + 260px)); } }
+
+  /* ---------- menu ---------- */
+  /* .menu is the main menu and the "More" page. */
+  .menu { overflow-y:auto; touch-action:pan-y; padding:calc(env(safe-area-inset-top) + 12px) 16px 24px; }
+  /* Auto margins centre the menu on tall screens without clipping it on short ones. */
+  .menu.on { display:flex; flex-direction:column; }
+  /* The square tiles make the grid about as tall as it is wide, so cap its width by the screen height. */
+  .menu .grid { width:100%; flex-shrink:0;
+                max-width:min(920px, calc(100vh - 340px)); max-width:min(920px, calc(100dvh - 340px)); }
+  .menu h1 { position:relative; text-align:center; font-size:clamp(40px,9vw,80px); margin:auto 0 18px;
+             color:#fff; text-shadow:0 4px 0 #ff6b9d, 0 10px 18px rgba(0,0,0,.15); letter-spacing:2px; }
+  .bigbtn { position:relative; display:block; margin:clamp(14px,3vw,24px) auto 0; font:inherit; font-weight:800;
+            font-size:clamp(24px,6vw,40px); border:0; border-radius:999px; padding:10px 34px; cursor:pointer;
+            background:#ff6b9d; color:#fff; box-shadow:0 6px 0 rgba(0,0,0,.15); }
+  .bigbtn:active { transform:translateY(4px); box-shadow:0 2px 0 rgba(0,0,0,.15); }
+  .bigbtn .ico { font-family:"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif; }
+  .bigbtn.back { background:#fff; color:var(--ink); }
+  /* Narrow phones: start the menu below the ⚙️ button so the title doesn't run into it. */
+  @media (max-width: 520px) { #menu { padding-top:calc(env(safe-area-inset-top) + 66px); } }
+  .grid { position:relative; display:grid; gap:clamp(10px,2.2vw,22px); max-width:920px; margin:0 auto;
+          grid-template-columns:repeat(3, minmax(0, 1fr)); } /* minmax(0,…) stops long labels widening a column past narrow screens */
+  .tile { border:0; border-radius:28px; padding:10px 6px; aspect-ratio:1; cursor:pointer; font:inherit; color:inherit; min-width:0;
+          text-align:center; overflow-wrap:anywhere;
+          display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px;
+          box-shadow:0 7px 0 var(--shadow); transition:transform .08s; }
+  .tile:active { transform:translateY(5px); box-shadow:0 2px 0 var(--shadow); }
+  .tile .ico { font-size:clamp(38px,11vw,84px); line-height:1;
+               font-family:"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif; }
+  .tile .lbl { font-size:clamp(14px,3.4vw,24px); font-weight:700; }
+  .tile .sub { font-size:clamp(11px,2.6vw,16px); opacity:.75; min-height:1em; }
+  .foot { position:relative; text-align:center; margin:22px auto auto; max-width:640px; font-size:15px; opacity:.8; }
+  .foot button { font:inherit; border:0; border-radius:999px; padding:10px 18px; background:#fff; box-shadow:0 4px 0 var(--shadow);
+                 margin-bottom:12px; cursor:pointer; }
+
+  /* ---------- game ---------- */
+  #game { overflow:hidden; }
+  #field { position:absolute; inset:0; }
+  .item { position:absolute; left:0; top:0; will-change:transform; cursor:pointer; touch-action:none; }
+  .item svg { width:100%; height:100%; display:block; pointer-events:none; overflow:visible; }
+  .item.popping { transition:opacity .12s, scale .12s; opacity:0; scale:1.35; pointer-events:none; }
+  .emoji { display:flex; align-items:center; justify-content:center; line-height:1;
+           font-family:"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif; }
+  .bubble { border-radius:50%; display:flex; align-items:center; justify-content:center; pointer-events:auto; }
+  .bubble.solid { color:#fff; font-weight:800; text-shadow:0 4px 0 rgba(0,0,0,.18);
+                  box-shadow:inset -10px -12px 0 rgba(0,0,0,.12), inset 10px 12px 0 rgba(255,255,255,.35), 0 6px 10px rgba(0,0,0,.1); }
+  .bubble.soap { border:3px solid rgba(255,255,255,.95);
+                 background:radial-gradient(circle at 30% 28%, rgba(255,255,255,.95) 0 9%, rgba(255,255,255,.25) 22%, rgba(170,215,255,.3) 70%, rgba(255,255,255,.75));
+                 font-family:"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif; }
+
+  .bit { position:absolute; border-radius:50%; pointer-events:none; animation:fly .6s ease-out forwards; }
+  @keyframes fly { to { transform:translate(var(--dx), var(--dy)) scale(.2); opacity:0; } }
+  .word { position:absolute; transform:translate(-50%,-50%); pointer-events:none; white-space:nowrap;
+          font-size:clamp(40px,10vw,96px); font-weight:800; color:#ff4f8b; z-index:4;
+          text-shadow:4px 0 0 #fff, -4px 0 0 #fff, 0 4px 0 #fff, 0 -4px 0 #fff,
+                      3px 3px 0 #fff, -3px 3px 0 #fff, 3px -3px 0 #fff, -3px -3px 0 #fff, 0 8px 16px rgba(0,0,0,.18);
+          animation:rise 1.5s ease-out forwards; }
+  @keyframes rise { 0% { scale:.4; opacity:0; } 12% { scale:1.15; opacity:1; } 25% { scale:1; } 75% { opacity:1; }
+                    100% { translate:0 -60px; opacity:0; } }
+
+  #hud { position:absolute; top:0; left:0; right:0; z-index:5; pointer-events:none;
+         display:flex; align-items:center; justify-content:space-between; gap:12px;
+         padding:calc(env(safe-area-inset-top) + 12px) 16px 0; }
+  #home { pointer-events:auto; position:relative; width:64px; height:64px; border-radius:50%; border:0; cursor:pointer;
+          background:rgba(255,255,255,.85); font-size:28px; box-shadow:0 4px 0 var(--shadow); touch-action:none; }
+  #home svg { position:absolute; inset:0; width:100%; height:100%; transform:rotate(-90deg); pointer-events:none; }
+  #home .ring { fill:none; stroke:#ff6b9d; stroke-width:6; stroke-linecap:round;
+                stroke-dasharray:176; stroke-dashoffset:176; transition:stroke-dashoffset .15s; }
+  #home.holding .ring { stroke-dashoffset:0; transition:stroke-dashoffset 1.2s linear; }
+  .pill { background:rgba(255,255,255,.85); border-radius:999px; padding:4px 20px; font-weight:800;
+          font-size:clamp(26px,6vw,46px); box-shadow:0 4px 0 var(--shadow); }
+  #best { font-size:clamp(16px,3.5vw,26px); padding:6px 14px; }
+  #score.bump { animation:bump .25s; }
+  @keyframes bump { 50% { scale:1.25; } }
+  #timebar { position:absolute; left:0; bottom:0; height:16px; width:100%; z-index:5;
+             background:linear-gradient(90deg,#2ecc40,#ffd60a,#ff8c1a); transform-origin:left; display:none; }
+
+  #end { position:absolute; inset:0; z-index:10; display:none; align-items:center; justify-content:center;
+         background:rgba(255,255,255,.55); }
+  #end.on { display:flex; }
+  .card { background:#fff; border-radius:36px; padding:28px 36px; text-align:center; box-shadow:0 10px 0 var(--shadow);
+          min-width:min(360px,86vw); }
+  .card .big { font-size:clamp(70px,16vw,130px); line-height:1; font-weight:800; color:#ff6b9d; }
+  .card .star { font-size:clamp(50px,12vw,90px); font-family:"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif; }
+  .card .msg { font-size:clamp(18px,4vw,26px); margin:8px 0 18px; }
+  .card button { font:inherit; font-size:clamp(28px,6vw,40px); border:0; border-radius:999px; padding:10px 28px; margin:6px;
+                 cursor:pointer; box-shadow:0 5px 0 var(--shadow); }
+  #again { background:#2ecc40; color:#fff; }
+
+  /* Capitals: the game pauses on a card with the flag, the country and its capital. */
+  #info { position:absolute; inset:0; z-index:10; display:none; align-items:center; justify-content:center;
+          background:rgba(43,45,66,.35); padding:16px; }
+  #info.on { display:flex; }
+  #info .card { position:relative; width:min(440px, 92vw); padding:70px 22px 22px; animation:cardIn .35s ease-out; } /* top room for ✕ */
+  @keyframes cardIn { 0% { scale:.6; opacity:0; } 70% { scale:1.05; opacity:1; } 100% { scale:1; } }
+  #infoFlag { width:min(300px, 70vw); margin:0 auto; border-radius:10px; overflow:hidden; box-shadow:0 6px 14px rgba(0,0,0,.18); }
+  #infoFlag svg { display:block; width:100%; height:auto; }
+  #infoCountry { font-size:clamp(28px,7vw,44px); font-weight:800; margin-top:14px; }
+  .info-sub { font-size:clamp(16px,3.8vw,22px); opacity:.7; margin-top:6px; }
+  #infoCapital { font-size:clamp(40px,11vw,72px); font-weight:800; color:#ff4f8b; line-height:1.1; margin:2px 0 14px; }
+  #infoClose { position:absolute; top:10px; right:10px; width:52px; height:52px; padding:0; margin:0; border-radius:50%;
+               background:#eef3f8; color:var(--ink); font-size:26px; box-shadow:none; }
+  #infoSay { background:#ffd60a; }
+  #infoGo { background:#2ecc40; color:#fff; }
+  #endhome { background:#eee; }
+
+  /* ---------- settings ---------- */
+  #gear { position:absolute; z-index:2; top:calc(env(safe-area-inset-top) + 12px); right:16px; width:60px; height:60px;
+          border:0; border-radius:50%; background:rgba(255,255,255,.9); font-size:30px; cursor:pointer;
+          box-shadow:0 4px 0 var(--shadow); }
+  #exitBtn { position:absolute; z-index:2; top:calc(env(safe-area-inset-top) + 12px); left:16px; width:60px; height:60px;
+             border:0; border-radius:50%; background:rgba(255,255,255,.9); font-size:30px; cursor:pointer;
+             box-shadow:0 4px 0 var(--shadow); font-family:"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif; }
+
+  /* Exit: asks before closing the app. Sits above every screen. */
+  #confirm { position:fixed; inset:0; z-index:30; display:none; align-items:center; justify-content:center;
+             background:rgba(43,45,66,.45); padding:16px; }
+  #confirm.on { display:flex; }
+  #confirm .card { width:min(420px, 92vw); animation:cardIn .3s ease-out; }
+  #confirm .door { font-size:clamp(56px,14vw,80px); line-height:1;
+                   font-family:"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif; }
+  #confirmMsg { font-size:clamp(26px,6.5vw,38px); font-weight:800; margin:10px 0 18px; }
+  #confirm .card button { display:block; width:100%; margin:10px 0 0; font-size:clamp(22px,5.5vw,30px); }
+  #confirmNo { background:#2ecc40; color:#fff; }
+  #confirmYes { background:#eef3f8; color:var(--ink); }
+
+  #settings { overflow-y:auto; touch-action:pan-y; padding:calc(env(safe-area-inset-top) + 16px) 16px 28px; }
+  .setwrap { max-width:620px; margin:0 auto; background:#fff; border-radius:32px; padding:20px 22px 24px;
+             box-shadow:0 8px 0 var(--shadow); }
+  .setwrap h2 { margin:0 0 12px; font-size:clamp(28px,6vw,40px); text-align:center; }
+  .row { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;
+         padding:14px 0; border-bottom:2px dashed #e6eef5; font-size:clamp(17px,4vw,22px); }
+  .seg { display:flex; gap:6px; flex-wrap:wrap; }
+  .seg button, #resetBest { font:inherit; font-size:clamp(15px,3.6vw,19px); border:0; border-radius:999px; padding:8px 16px;
+                            background:#eef3f8; cursor:pointer; color:var(--ink); }
+  .seg button.on { background:#ff6b9d; color:#fff; font-weight:700; }
+  .done { display:block; margin:20px auto 0; font:inherit; font-size:clamp(22px,5vw,30px); border:0; border-radius:999px;
+          padding:10px 34px; background:#2f7bff; color:#fff; cursor:pointer; box-shadow:0 5px 0 var(--shadow); }
+  .ver { text-align:center; margin-top:14px; font-size:14px; color:#5b6175; }
+  .vtag { font-size:.32em; vertical-align:middle; background:#fff; color:#2f7bff; border-radius:999px;
+          padding:2px 12px; box-shadow:0 3px 0 var(--shadow); text-shadow:none; letter-spacing:0; font-weight:700; }
+  .slider { flex:1 1 200px; max-width:320px; height:44px; accent-color:#ff6b9d; cursor:pointer; touch-action:none; }
+  #musicPct { color:#ff6b9d; }
+
+  /* Phones held sideways: two wide rows instead of three. Kept last so it wins over the rules above. */
+  @media (orientation: landscape) and (max-height: 640px) {
+    .menu .grid { grid-template-columns:repeat(5, minmax(0, 1fr)); max-width:1100px; gap:10px; }
+    .menu .tile { aspect-ratio:1.3; padding:4px; border-radius:22px; }
+    .menu .tile .ico { font-size:clamp(28px, 11vh, 60px); }
+    .menu .tile .lbl { font-size:clamp(13px, 3.8vh, 20px); }
+    .menu .tile .sub { display:none; }
+    .menu h1 { font-size:clamp(28px, 9vh, 52px); margin-bottom:10px; }
+    .bigbtn { font-size:22px; padding:6px 26px; margin-top:10px; }
+    .foot { margin-top:10px; font-size:13px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ================= MENU ================= -->
+<div id="menu" class="screen menu on">
+  <div class="cloud" style="top:12%;animation-duration:70s;animation-delay:-20s"></div>
+  <div class="cloud" style="top:55%;animation-duration:90s;animation-delay:-60s;scale:.7"></div>
+  <button id="exitBtn" aria-label="Exit">🚪</button>
+  <button id="gear" aria-label="Settings">⚙️</button>
+  <h1>Pop Pop Play <span class="vtag" id="vtag"></span></h1>
+  <div class="grid">
+    <button class="tile" data-mode="balloons" style="background:#ffd1dc"><span class="ico">🎈</span><span class="lbl">Balloons</span><span class="sub">Pop forever</span></button>
+    <button class="tile" data-mode="race"     style="background:#ffe6a8"><span class="ico">⏱️</span><span class="lbl">Balloon Race</span><span class="sub" id="menuBest">1 minute</span></button>
+    <button class="tile" data-mode="bugs"     style="background:#d4f5c9"><span class="ico">🐞</span><span class="lbl">Bugs</span><span class="sub"></span></button>
+    <button class="tile" data-mode="numbers"  style="background:#cfe7ff"><span class="ico">🔢</span><span class="lbl">Numbers</span><span class="sub">1 to 10</span></button>
+    <button class="tile" data-mode="abc"      style="background:#e6d6ff"><span class="ico">🔤</span><span class="lbl">ABC</span><span class="sub">A to Z</span></button>
+    <button class="tile" data-mode="animals"  style="background:#ffe0c7"><span class="ico">🐶</span><span class="lbl">Animals</span><span class="sub">Names</span></button>
+    <button class="tile" data-mode="sounds"   style="background:#fff3b0"><span class="ico">🐮</span><span class="lbl">Animal Sounds</span><span class="sub">Moo!</span></button>
+    <button class="tile" data-mode="shapes"   style="background:#c9f3ef"><span class="ico">🔺</span><span class="lbl">Shapes</span><span class="sub"></span></button>
+    <button class="tile" data-mode="colors"   style="background:#ffd6f0"><span class="ico">🎨</span><span class="lbl">Colors</span><span class="sub"></span></button>
+  </div>
+  <button id="moreBtn" class="bigbtn"><span class="ico">🚗🐝</span> More ▶</button>
+  <div class="foot">
+    <button id="fs">⛶ Full screen</button><br>
+    Grown-ups: <b id="hint">press and hold 🏠</b> to go back to this menu.<br>
+    No ads, no internet, nothing to buy.
+  </div>
+</div>
+
+<!-- ================= MORE GAMES ================= -->
+<div id="more" class="screen menu">
+  <div class="cloud" style="top:18%;animation-duration:75s;animation-delay:-40s"></div>
+  <div class="cloud" style="top:62%;animation-duration:95s;animation-delay:-10s;scale:.7"></div>
+  <h1>More games</h1>
+  <div class="grid">
+    <button class="tile" data-mode="vehicles"     style="background:#cfe7ff"><span class="ico">🚒</span><span class="lbl">Vehicles</span><span class="sub">Names</span></button>
+    <button class="tile" data-mode="carcount"     style="background:#ffe6a8"><span class="ico">🚗</span><span class="lbl">Count Cars</span><span class="sub">1, 2, 3…</span></button>
+    <button class="tile" data-mode="carcolors"    style="background:#ffd6f0"><span class="ico">🚙</span><span class="lbl">Car Colors</span><span class="sub">Red, blue…</span></button>
+    <button class="tile" data-mode="insects"      style="background:#d4f5c9"><span class="ico">🐝</span><span class="lbl">Insects</span><span class="sub">Names</span></button>
+    <button class="tile" data-mode="insectsounds" style="background:#fff3b0"><span class="ico">🦗</span><span class="lbl">Insect Sounds</span><span class="sub">Buzz!</span></button>
+    <button class="tile" data-mode="family"       style="background:#ffe0c7"><span class="ico">👪</span><span class="lbl">Family</span><span class="sub">Mommy, daddy…</span></button>
+    <button class="tile" data-mode="jobs"         style="background:#e6d6ff"><span class="ico">👩‍🚒</span><span class="lbl">Jobs</span><span class="sub">Doctor, chef…</span></button>
+    <button class="tile" data-mode="flags"        style="background:#c9f3ef"><span class="ico">🏳️</span><span class="lbl">Flags</span><span class="sub">Countries</span></button>
+    <button class="tile" data-mode="capitals"     style="background:#ffd1dc"><span class="ico">🌏</span><span class="lbl">Capitals</span><span class="sub">Manila, Tokyo…</span></button>
+  </div>
+  <button id="moreBack" class="bigbtn back">◀ Back</button>
+  <div class="foot"></div>
+</div>
+
+<!-- ================= EXIT ================= -->
+<div id="confirm" role="dialog" aria-labelledby="confirmMsg">
+  <div class="card">
+    <div class="door">🚪</div>
+    <div id="confirmMsg">Close Pop Pop Play?</div>
+    <button id="confirmNo">No, keep playing</button>
+    <button id="confirmYes">Yes, close</button>
+  </div>
+</div>
+
+<!-- ================= SETTINGS ================= -->
+<div id="settings" class="screen">
+  <div class="setwrap">
+    <h2>⚙️ Settings</h2>
+    <div class="row"><span>🗣️ Voice</span>
+      <div class="seg" data-key="voice"><button data-v="1">On</button><button data-v="0">Off</button></div></div>
+    <div class="row"><span>🎵 Music <b id="musicPct"></b></span>
+      <input type="range" id="musicVol" class="slider" min="0" max="100" step="5" aria-label="Music volume"></div>
+    <div class="row"><span>🔊 Pop sounds</span>
+      <div class="seg" data-key="sounds"><button data-v="1">On</button><button data-v="0">Off</button></div></div>
+    <div class="row"><span>⏱️ Race time</span>
+      <div class="seg" data-key="race"><button data-v="30">30 sec</button><button data-v="60">1 min</button><button data-v="120">2 min</button></div></div>
+    <div class="row"><span>🔢 Numbers up to</span>
+      <div class="seg" data-key="numMax"><button data-v="5">5</button><button data-v="10">10</button><button data-v="20">20</button></div></div>
+    <div class="row"><span>🏠 Back to menu</span>
+      <div class="seg" data-key="homeTap"><button data-v="0">Hold (safer)</button><button data-v="1">Tap</button></div></div>
+    <div class="row"><span>🏆 Race best: <b id="setBest">0</b></span><button id="resetBest">Reset</button></div>
+    <button id="setDone" class="done">◀ Back</button>
+    <div class="ver" id="ver"></div>
+  </div>
+</div>
+
+<!-- ================= GAME ================= -->
+<div id="game" class="screen">
+  <div class="cloud" style="top:10%;animation-duration:80s;animation-delay:-30s"></div>
+  <div class="cloud" style="top:40%;animation-duration:110s;animation-delay:-80s;scale:.6"></div>
+  <div id="field"></div>
+  <div id="hud">
+    <button id="home" aria-label="Hold to go home">🏠<svg viewBox="0 0 64 64"><circle class="ring" cx="32" cy="32" r="28"/></svg></button>
+    <div id="best" class="pill" style="display:none"></div>
+    <div id="score" class="pill">⭐ 0</div>
+  </div>
+  <div id="timebar"></div>
+  <div id="end">
+    <div class="card">
+      <div class="star" id="endStar">⭐</div>
+      <div class="big" id="endScore">0</div>
+      <div class="msg" id="endMsg"></div>
+      <button id="again" aria-label="Play again">▶</button>
+      <button id="endhome" aria-label="Menu">🏠</button>
+    </div>
+  </div>
+  <div id="info" role="dialog" aria-labelledby="infoCountry">
+    <div class="card">
+      <button id="infoClose" aria-label="Close">✕</button>
+      <div id="infoFlag"></div>
+      <div id="infoCountry"></div>
+      <div class="info-sub">Capital city</div>
+      <div id="infoCapital"></div>
+      <button id="infoSay" aria-label="Say it again">🔊</button>
+      <button id="infoGo" aria-label="Keep playing">▶</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  "use strict";
+
+  // ================= data =================
+  const COLORS = [
+    { name: "red",    c: "#ff3b3b" }, { name: "blue",   c: "#2f7bff" },
+    { name: "yellow", c: "#ffd60a" }, { name: "green",  c: "#2ecc40" },
+    { name: "orange", c: "#ff8c1a" }, { name: "purple", c: "#9b4dff" },
+    { name: "pink",   c: "#ff7ac6" }, { name: "brown",  c: "#8b5a2b" },
+    { name: "black",  c: "#222222" }, { name: "white",  c: "#ffffff" },
+  ];
+  const BRIGHT = COLORS.slice(0, 7).map(x => x.c);
+  const INSECTS = ["🐞", "🦋", "🐝", "🐛", "🐜", "🦗", "🪲"];
+
+  const ANIMALS = [
+    { e: "🐶", name: "dog",      sound: "woof woof!" },
+    { e: "🐱", name: "cat",      sound: "meow!" },
+    { e: "🐮", name: "cow",      sound: "mooooo!" },
+    { e: "🐷", name: "pig",      sound: "oink oink!" },
+    { e: "🐑", name: "sheep",    sound: "baa baa!" },
+    { e: "🐴", name: "horse",    sound: "neigh!" },
+    { e: "🐔", name: "chicken",  sound: "cluck cluck!" },
+    { e: "🦆", name: "duck",     sound: "quack quack!" },
+    { e: "🐸", name: "frog",     sound: "ribbit ribbit!" },
+    { e: "🦁", name: "lion",     sound: "roar!" },
+    { e: "🐵", name: "monkey",   sound: "ooh ooh, ah ah!" },
+    { e: "🐭", name: "mouse",    sound: "squeak squeak!" },
+    { e: "🦉", name: "owl",      sound: "hoo hoo!" },
+    { e: "🐍", name: "snake",    sound: "hissss!" },
+    { e: "🐦", name: "bird",     sound: "tweet tweet!" },
+    { e: "🐺", name: "wolf",     sound: "awoooo!" },
+    { e: "🐘", name: "elephant" }, { e: "🦒", name: "giraffe" },
+    { e: "🐻", name: "bear" },     { e: "🐯", name: "tiger" },
+    { e: "🐰", name: "rabbit" },   { e: "🐟", name: "fish" },
+    { e: "🦓", name: "zebra" },    { e: "🐧", name: "penguin" },
+  ];
+  const SOUND_ANIMALS = ANIMALS.filter(a => a.sound);
+
+  const VEHICLES = [
+    { e: "🚗", name: "car" },        { e: "🚌", name: "bus" },
+    { e: "🚒", name: "fire truck" }, { e: "🚓", name: "police car" },
+    { e: "🚑", name: "ambulance" },  { e: "🚕", name: "taxi" },
+    { e: "🚚", name: "truck" },      { e: "🚜", name: "tractor" },
+    { e: "🏍️", name: "motorcycle" }, { e: "🚲", name: "bicycle" },
+    { e: "🚂", name: "train" },      { e: "✈️", name: "airplane" },
+    { e: "🚁", name: "helicopter" }, { e: "⛵", name: "sailboat" },
+    { e: "🚀", name: "rocket" },     { e: "🛵", name: "scooter" },
+    { e: "🚐", name: "van" },        { e: "🚢", name: "ship" },
+    { e: "🏎️", name: "race car" },
+  ];
+
+  // Insects for the Insects and Insect Sounds games (the Bugs game keeps its own list above).
+  const BUGS = [
+    { e: "🐞", name: "ladybug",     sound: "flutter flutter!" },
+    { e: "🦋", name: "butterfly",   sound: "flap flap!" },
+    { e: "🐝", name: "bee",         sound: "buzz buzz!" },
+    { e: "🐛", name: "caterpillar", sound: "munch munch!" },
+    { e: "🦗", name: "cricket",     sound: "chirp chirp!" },
+    { e: "🪲", name: "beetle",      sound: "click click!" },
+    { e: "🐜", name: "ant" },
+    { e: "🪰", name: "fly" },
+  ];
+  const SOUND_BUGS = BUGS.filter(b => b.sound);
+
+  const FAMILY = [
+    { e: "👩", name: "mommy" },   { e: "👨", name: "daddy" },
+    { e: "👵", name: "grandma" }, { e: "👴", name: "grandpa" },
+    { e: "👧", name: "sister" },  { e: "👦", name: "brother" },
+    { e: "👶", name: "baby" },    { e: "👪", name: "family" },
+  ];
+
+  const JOBS = [
+    { e: "👩‍🚒", name: "firefighter" }, { e: "👮", name: "police officer" },
+    { e: "👨‍⚕️", name: "doctor" },      { e: "👩‍⚕️", name: "nurse" },
+    { e: "👩‍🏫", name: "teacher" },     { e: "👨‍🍳", name: "chef" },
+    { e: "👩‍🌾", name: "farmer" },      { e: "👨‍🚀", name: "astronaut" },
+    { e: "👩‍🔧", name: "mechanic" },    { e: "👨‍🎨", name: "artist" },
+    { e: "👩‍✈️", name: "pilot" },       { e: "👷", name: "builder" },
+    { e: "👩‍🔬", name: "scientist" },
+  ];
+
+  // Flags are drawn here (viewBox 0 0 60 40), because flag emoji show as letters on some devices.
+  const band3 = (a, b, c, across) => across
+    ? '<rect width="20" height="40" fill="' + a + '"/><rect x="20" width="20" height="40" fill="' + b + '"/><rect x="40" width="20" height="40" fill="' + c + '"/>'
+    : '<rect width="60" height="14" fill="' + a + '"/><rect y="13" width="60" height="14" fill="' + b + '"/><rect y="26" width="60" height="14" fill="' + c + '"/>';
+  const star5 = (cx, cy, r, fill) => {
+    const p = [];
+    for (let i = 0; i < 10; i++) {
+      const rr = i % 2 ? r * 0.4 : r, a = -Math.PI / 2 + i * Math.PI / 5;
+      p.push((cx + rr * Math.cos(a)).toFixed(2) + "," + (cy + rr * Math.sin(a)).toFixed(2));
+    }
+    return '<polygon points="' + p.join(" ") + '" fill="' + fill + '"/>';
+  };
+  function usFlag() {
+    let s = "";
+    for (let i = 0; i < 13; i++) s += '<rect y="' + (i * 40 / 13).toFixed(2) + '" width="60" height="3.1" fill="' + (i % 2 ? "#fff" : "#b22234") + '"/>';
+    s += '<rect width="26" height="21.5" fill="#3c3b6e"/>';
+    for (let r = 0; r < 5; r++) for (let c = 0; c < 6; c++) s += '<circle cx="' + (2.5 + c * 4.2) + '" cy="' + (2.4 + r * 4.2) + '" r=".9" fill="#fff"/>';
+    return s;
+  }
+  const FLAGS = [
+    { name: "Philippines", svg: '<rect width="60" height="20" fill="#0038a8"/><rect y="20" width="60" height="20" fill="#ce1126"/>' +
+        '<polygon points="0,0 34.6,20 0,40" fill="#fff"/><circle cx="11" cy="20" r="4" fill="#fcd116"/>' +
+        star5(3.5, 5, 2, "#fcd116") + star5(3.5, 35, 2, "#fcd116") + star5(28, 20, 2, "#fcd116") },
+    { name: "United States", svg: usFlag() },
+    { name: "Japan", svg: '<rect width="60" height="40" fill="#fff"/><circle cx="30" cy="20" r="12" fill="#bc002d"/>' },
+    { name: "United Kingdom", svg: '<rect width="60" height="40" fill="#012169"/>' +
+        '<path d="M0 0L60 40M60 0L0 40" stroke="#fff" stroke-width="8"/><path d="M0 0L60 40M60 0L0 40" stroke="#c8102e" stroke-width="3"/>' +
+        '<path d="M30 0V40M0 20H60" stroke="#fff" stroke-width="12"/><path d="M30 0V40M0 20H60" stroke="#c8102e" stroke-width="7"/>' },
+    { name: "France", svg: band3("#0055a4", "#fff", "#ef4135", true) },
+    { name: "Italy", svg: band3("#009246", "#fff", "#ce2b37", true) },
+    { name: "Ireland", svg: band3("#169b62", "#fff", "#ff883e", true) },
+    { name: "Nigeria", svg: band3("#008751", "#fff", "#008751", true) },
+    { name: "Germany", svg: band3("#000", "#dd0000", "#ffce00", false) },
+    { name: "India", svg: band3("#ff9933", "#fff", "#138808", false) + '<circle cx="30" cy="20" r="5" fill="none" stroke="#000080" stroke-width="1.2"/><circle cx="30" cy="20" r="1.2" fill="#000080"/>' },
+    { name: "Brazil", svg: '<rect width="60" height="40" fill="#009c3b"/><polygon points="30,4 56,20 30,36 4,20" fill="#ffdf00"/><circle cx="30" cy="20" r="9" fill="#002776"/>' +
+        '<path d="M21.5 18Q30 15 38.6 22" stroke="#fff" stroke-width="1.6" fill="none"/>' },
+    { name: "China", svg: '<rect width="60" height="40" fill="#de2910"/>' + star5(10, 10, 6, "#ffde00") +
+        star5(20, 4, 2, "#ffde00") + star5(24, 8, 2, "#ffde00") + star5(24, 14, 2, "#ffde00") + star5(20, 18, 2, "#ffde00") },
+    { name: "Vietnam", svg: '<rect width="60" height="40" fill="#da251d"/>' + star5(30, 21, 11, "#ffff00") },
+    { name: "Indonesia", svg: '<rect width="60" height="20" fill="#ce1126"/><rect y="20" width="60" height="20" fill="#fff"/>' },
+    { name: "Thailand", svg: '<rect width="60" height="40" fill="#a51931"/><rect y="6.7" width="60" height="26.6" fill="#f4f5f8"/><rect y="13.3" width="60" height="13.4" fill="#2d2a4a"/>' },
+    { name: "Sweden", svg: '<rect width="60" height="40" fill="#006aa7"/><path d="M22 0V40M0 20H60" stroke="#fecc00" stroke-width="7"/>' },
+    { name: "Spain", svg: '<rect width="60" height="40" fill="#aa151b"/><rect y="10" width="60" height="20" fill="#f1bf00"/>' },
+    { name: "Canada", svg: '<rect width="60" height="40" fill="#fff"/><rect width="15" height="40" fill="#d80621"/><rect x="45" width="15" height="40" fill="#d80621"/>' +
+        '<path d="M30 8l2.5 5 3-1.5-1 6.5 4-4 1 2.5 4-1-1.5 4.5 1.5 1-7 5.5.8 3H31v4h-2v-4h-5.3l.8-3-7-5.5 1.5-1-1.5-4.5 4 1 1-2.5 4 4-1-6.5 3 1.5z" fill="#d80621"/>' },
+  ];
+  // Countries & Capitals. Indonesia is left out while its capital moves from Jakarta to Nusantara.
+  const CAPITALS = {
+    "Philippines": "Manila", "United States": "Washington, D.C.", "Japan": "Tokyo", "United Kingdom": "London",
+    "France": "Paris", "Italy": "Rome", "Ireland": "Dublin", "Nigeria": "Abuja", "Germany": "Berlin",
+    "India": "New Delhi", "Brazil": "Brasília", "China": "Beijing", "Vietnam": "Hanoi", "Thailand": "Bangkok",
+    "Sweden": "Stockholm", "Spain": "Madrid", "Canada": "Ottawa",
+  };
+  const NEEDS_THE = new Set(["Philippines", "United States", "United Kingdom"]);
+  const CAPITAL_FLAGS = FLAGS.filter(f => CAPITALS[f.name]);
+
+  // Speech engines often read a lone "A" as "uh", so spell that one out.
+  const LETTER_SAY = { A: "ay" };
+  const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
+
+  function starPoints() {
+    const pts = [];
+    for (let i = 0; i < 10; i++) {
+      const r = i % 2 ? 19 : 47, a = -Math.PI / 2 + i * Math.PI / 5;
+      pts.push((50 + r * Math.cos(a)).toFixed(1) + "," + (53 + r * Math.sin(a)).toFixed(1));
+    }
+    return pts.join(" ");
+  }
+  const SHAPES = [
+    { name: "circle",    svg: '<circle cx="50" cy="50" r="44"/>' },
+    { name: "square",    svg: '<rect x="8" y="8" width="84" height="84" rx="6"/>' },
+    { name: "triangle",  svg: '<polygon points="50,6 95,90 5,90"/>' },
+    { name: "rectangle", svg: '<rect x="3" y="24" width="94" height="52" rx="5"/>' },
+    { name: "oval",      svg: '<ellipse cx="50" cy="50" rx="46" ry="31"/>' },
+    { name: "star",      svg: '<polygon points="' + starPoints() + '"/>' },
+    { name: "heart",     svg: '<path d="M50 90C20 68 4 52 4 33 4 17 16 7 30 7c10 0 17 6 20 14 3-8 10-14 20-14 14 0 26 10 26 26 0 19-16 35-46 57z"/>' },
+    { name: "diamond",   svg: '<polygon points="50,4 92,50 50,96 8,50"/>' },
+  ];
+
+  // ================= helpers =================
+  const $ = s => document.querySelector(s);
+  const rand = (a, b) => a + Math.random() * (b - a);
+  const pick = arr => arr[(Math.random() * arr.length) | 0];
+  const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+
+  /**
+   * A shuffled deck: every entry comes up once, in random order, before any repeats; then it reshuffles.
+   * Entries already on screen are skipped for now (they stay in the deck), and a new round never
+   * starts with the entry that ended the last one. `list` can be a function, for lists that follow a setting.
+   */
+  function deck(list, keyOf) {
+    let bag = [], lastKey = null;
+    return () => {
+      if (!bag.length) {
+        bag = (typeof list === "function" ? list() : list).slice();
+        for (let i = bag.length - 1; i > 0; i--) { const j = (Math.random() * (i + 1)) | 0; [bag[i], bag[j]] = [bag[j], bag[i]]; }
+        if (bag.length > 1 && keyOf(bag[0]) === lastKey) bag.push(bag.shift());
+      }
+      let i = bag.findIndex(x => !onScreen(keyOf(x)));
+      if (i < 0) i = 0;
+      const [x] = bag.splice(i, 1);
+      lastKey = keyOf(x);
+      return x;
+    };
+  }
+  const onScreen = key => items.some(it => it.spec.key === key);
+  /** make() for a game: draw the next entry from its deck and build the item for it. */
+  const deckMaker = (list, keyOf, build) => { const next = deck(list, keyOf); return () => build(next()); };
+
+  function store(key, val) {
+    try {
+      if (val === undefined) return localStorage.getItem(key);
+      localStorage.setItem(key, val);
+    } catch (e) { /* storage blocked: the game still works */ }
+    return null;
+  }
+
+  // ================= settings =================
+  // musicVol: 0 to 100, 0 = off, 50 = the normal low level.
+  const DEFAULTS = { voice: 1, musicVol: 50, sounds: 1, race: 60, numMax: 10, homeTap: 0 };
+  const settings = Object.assign({}, DEFAULTS);
+  try { Object.assign(settings, JSON.parse(store("poppop.settings") || "{}")); } catch (e) { /* keep defaults */ }
+  if ("music" in settings) {                 // 1.2 had an on/off switch: keep "off" as volume 0
+    if (!settings.music) settings.musicVol = 0;
+    delete settings.music;
+  }
+  const saveSettings = () => store("poppop.settings", JSON.stringify(settings));
+
+  // ================= audio (all generated, works offline) =================
+  let ac = null, noiseBuf = null;
+  function audio() {
+    if (!ac) {
+      // iPhone: without this, the ring/silent switch mutes pops and music but not the spoken words.
+      try { if (navigator.audioSession) navigator.audioSession.type = "playback"; } catch (e) { /* older Safari */ }
+      try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return null; }
+    }
+    if (ac.state === "suspended") ac.resume();
+    return ac;
+  }
+  function tone(a, type, f0, f1, dur, vol, when = 0) {
+    const t = a.currentTime + when, o = a.createOscillator(), g = a.createGain();
+    o.type = type;
+    o.frequency.setValueAtTime(f0, t);
+    o.frequency.exponentialRampToValueAtTime(f1, t + dur);
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    o.connect(g).connect(a.destination);
+    o.start(t); o.stop(t + dur + 0.02);
+  }
+  const SFX = {
+    pop() {
+      const a = audio(); if (!a) return;
+      if (!noiseBuf) {
+        const len = (a.sampleRate * 0.12) | 0;
+        noiseBuf = a.createBuffer(1, len, a.sampleRate);
+        const d = noiseBuf.getChannelData(0);
+        for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 4);
+      }
+      const src = a.createBufferSource(), f = a.createBiquadFilter(), g = a.createGain();
+      src.buffer = noiseBuf; f.type = "bandpass"; f.frequency.value = rand(900, 1800); f.Q.value = 0.8; g.gain.value = 0.9;
+      src.connect(f).connect(g).connect(a.destination); src.start();
+      tone(a, "sine", rand(650, 950), 150, 0.11, 0.35);
+    },
+    bloop() { const a = audio(); if (a) tone(a, "sine", rand(280, 360), rand(850, 1000), 0.1, 0.4); },
+    bug()   { const a = audio(); if (a) { tone(a, "triangle", 520, 260, 0.08, 0.35); tone(a, "triangle", 700, 350, 0.08, 0.3, 0.07); } },
+    honk()  { const a = audio(); if (a) { tone(a, "square", 440, 430, 0.1, 0.12); tone(a, "square", 440, 430, 0.12, 0.12, 0.14); } },
+    yay() {
+      const a = audio(); if (!a) return;
+      [523, 659, 784, 1047].forEach((f, i) => tone(a, "triangle", f, f * 1.01, 0.25, 0.3, i * 0.12));
+    },
+  };
+
+  // ================= background music (generated, kept low) =================
+  // Two tunes that are made up as they play, so they never loop the same way for long:
+  //  - menu: slow and gentle music box
+  //  - game: bouncier marimba with a soft beat; each game plays it in its own key
+  // Pitched for small phone speakers, and always well below the pop sounds.
+  const Music = (() => {
+    const STYLES = {
+      menu: { vol: 0.13, bpm: 84, rest: [0.3, 0.75], lead: "musicbox", beat: false,
+              chords: [[0, [0, 4, 7]], [-3, [9, 0, 4]], [5, [5, 9, 0]], [7, [7, 11, 2]]] },   // C Am F G
+      game: { vol: 0.15, bpm: 120, rest: [0.12, 0.5], lead: "marimba", beat: true,
+              chords: [[0, [0, 4, 7]], [5, [5, 9, 0]], [7, [7, 11, 2]], [5, [5, 9, 0]]] },    // C F G F
+    };
+    const KEYS = { balloons: 0, race: 2, bugs: -3, numbers: 5, abc: 3, animals: -2, sounds: 4, shapes: 1, colors: -1,
+                   vehicles: 2, carcount: 5, carcolors: -1, insects: -3, insectsounds: 4, family: 0, jobs: 3, flags: 1, capitals: -2 };
+    const SCALE = [0, 2, 4, 7, 9, 12, 14, 16];     // major pentatonic, always sounds happy
+    const hz = m => 440 * Math.pow(2, (m - 69) / 12);
+
+    let style = STYLES.menu, key = 0, bpm = STYLES.menu.bpm;
+    let bus = null, tickBuf = null, timer = 0, nextTime = 0, step = 0, song = [], playing = false;
+
+    function makePhrase() {
+      const notes = [];
+      let idx = 2;
+      for (let bar = 0; bar < 4; bar++) {
+        const tones = style.chords[bar][1];
+        for (let e = 0; e < 8; e++) {
+          if (bar === 3 && e >= 6) { notes.push(e === 6 ? 0 : null); continue; }   // land home
+          if (Math.random() < style.rest[e % 2]) { notes.push(null); continue; }
+          if (e === 0) {                           // start each bar on a note of the chord
+            const fits = SCALE.map((n, i) => i).filter(i => tones.includes(SCALE[i] % 12));
+            idx = pick(fits.length ? fits : [0]);
+          } else {
+            idx = Math.max(0, Math.min(SCALE.length - 1, idx + pick([-2, -1, -1, 1, 1, 2])));
+          }
+          notes.push(SCALE[idx]);
+        }
+      }
+      return notes;
+    }
+    function newSong() { const a = makePhrase(), b = makePhrase(); song = [a, a, b, a]; }
+
+    function tone(t, f, vol, dur, type) {
+      const o = ac.createOscillator(), g = ac.createGain();
+      o.type = type; o.frequency.value = f;
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(vol, t + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(g).connect(bus);
+      o.start(t); o.stop(t + dur + 0.05);
+    }
+    function lead(t, m) {
+      const f = hz(m);
+      if (style.lead === "musicbox") {             // soft bell with a quiet octave sparkle
+        tone(t, f, 0.5, 0.8, "sine");
+        tone(t, f * 2, 0.14, 0.45, "sine");
+      } else {                                     // marimba: round note plus a woody click
+        tone(t, f, 0.55, 0.32, "sine");
+        tone(t, f * 4, 0.1, 0.06, "sine");
+      }
+    }
+    function shaker(t, vol) {
+      if (!tickBuf) {
+        const len = (ac.sampleRate * 0.04) | 0;
+        tickBuf = ac.createBuffer(1, len, ac.sampleRate);
+        const d = tickBuf.getChannelData(0);
+        for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3);
+      }
+      const src = ac.createBufferSource(), hp = ac.createBiquadFilter(), g = ac.createGain();
+      src.buffer = tickBuf; hp.type = "highpass"; hp.frequency.value = 6000; g.gain.value = vol;
+      src.connect(hp).connect(g).connect(bus);
+      src.start(t);
+    }
+
+    function playStep(s, t) {
+      if (s % 128 === 0) newSong();
+      const bar = Math.floor(s / 8) % 4, e = s % 8;
+      const m = song[Math.floor(s / 32) % 4][bar * 8 + e];
+      if (m !== null) lead(t, 72 + key + m);       // melody around C5: clear on phone speakers
+      const root = 48 + key + style.chords[bar][0]; // bass around C3
+      if (style.beat) {                            // bouncy bass and a soft shaker
+        if (e === 0) tone(t, hz(root), 0.5, 0.3, "triangle");
+        if (e === 3 || e === 6) tone(t, hz(root + 7), 0.35, 0.2, "triangle");
+        if (e === 4) tone(t, hz(root + 12), 0.4, 0.25, "triangle");
+        shaker(t, e % 2 ? 0.35 : 0.15);
+      } else {
+        if (e === 0) tone(t, hz(root), 0.45, 0.9, "triangle");
+        if (e === 4) tone(t, hz(root + 7), 0.3, 0.7, "triangle");
+      }
+    }
+
+    function tick() {
+      if (!ac) return;
+      const eighth = 60 / bpm / 2;
+      if (nextTime < ac.currentTime - 0.1) nextTime = ac.currentTime + 0.05; // caught up after a pause
+      while (nextTime < ac.currentTime + 0.3) { playStep(step++, nextTime); nextTime += eighth; }
+    }
+
+    // Settings slider: 50 is the normal low level, 100 is twice that.
+    const level = () => style.vol * settings.musicVol / 50;
+
+    function fadeTo(v, secs) {
+      const now = ac.currentTime;
+      bus.gain.cancelScheduledValues(now);
+      bus.gain.setValueAtTime(Math.max(0.0001, bus.gain.value), now);
+      bus.gain.exponentialRampToValueAtTime(Math.max(0.0001, v), now + secs);
+    }
+
+    return {
+      start() {
+        if (playing || !settings.musicVol) return;
+        const a = audio(); if (!a) return;
+        if (!bus) {
+          bus = a.createGain();
+          bus.gain.value = 0.0001;
+          const soft = a.createBiquadFilter();
+          soft.type = "lowpass"; soft.frequency.value = 4500;
+          bus.connect(soft).connect(a.destination);
+        }
+        fadeTo(level(), 1.2);
+        step = 0; nextTime = a.currentTime + 0.1;
+        timer = setInterval(tick, 80);
+        playing = true;
+      },
+      stop() {
+        if (!playing) return;
+        clearInterval(timer);
+        fadeTo(0.0001, 0.25);
+        playing = false;
+      },
+      /** Switch tune: "menu", or "game" with the game's mode for its key. */
+      scene(name, mode) {
+        const next = STYLES[name] || STYLES.menu;
+        const nextKey = name === "game" ? (KEYS[mode] || 0) : 0;
+        const nextBpm = mode === "race" ? 132 : next.bpm;
+        if (next === style && nextKey === key && nextBpm === bpm) return;
+        style = next; key = nextKey; bpm = nextBpm;
+        step = 0;
+        if (!playing) return;
+        // Quick dip, then the new tune fades in.
+        bus.gain.cancelScheduledValues(ac.currentTime);
+        bus.gain.setTargetAtTime(0.0001, ac.currentTime, 0.06);
+        nextTime = ac.currentTime + 0.35;
+        bus.gain.setTargetAtTime(level(), ac.currentTime + 0.35, 0.3);
+      },
+      /** Follow the settings slider: 0 stops the music, anything else plays at that level. */
+      setVolume() {
+        if (!settings.musicVol) { this.stop(); return; }
+        if (!playing) { this.start(); return; }
+        fadeTo(level(), 0.15);
+      },
+      duck() {                                     // dip while a word is spoken
+        if (!playing) return;
+        const now = ac.currentTime;
+        bus.gain.cancelScheduledValues(now);
+        bus.gain.setTargetAtTime(level() * 0.35, now, 0.04);
+        bus.gain.setTargetAtTime(level(), now + 1.2, 0.4);
+      },
+    };
+  })();
+
+  // ================= speech (uses the device's built-in voice) =================
+  // Inside the Android app, speech goes through the phone's own text-to-speech engine.
+  const bridge = window.AndroidApp || null;
+  const canSpeak = !bridge && "speechSynthesis" in window;
+  let voice = null;
+  function loadVoices() {
+    const en = speechSynthesis.getVoices().filter(v => /^en/i.test(v.lang));
+    // Prefer on-device voices so speech works with no internet.
+    voice = en.find(v => v.localService && /en[-_]US/i.test(v.lang)) || en.find(v => v.localService) || en[0] || null;
+  }
+  if (canSpeak) { loadVoices(); speechSynthesis.onvoiceschanged = loadVoices; }
+  function stopSpeech() {
+    if (bridge) bridge.stop();
+    else if (canSpeak) speechSynthesis.cancel();
+  }
+  function say(text) {
+    if (!settings.voice || !text) return;
+    Music.duck();
+    if (bridge) { bridge.speak(text); return; }
+    if (!canSpeak) return;
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    if (voice) u.voice = voice;
+    u.lang = voice ? voice.lang : "en-US";
+    u.rate = 0.85; u.pitch = 1.15;
+    speechSynthesis.speak(u);
+  }
+
+  // ================= item builders =================
+  let W = innerWidth, H = innerHeight, S = 120;
+  function measure() {
+    W = innerWidth; H = innerHeight;
+    S = Math.max(80, Math.min(200, Math.sqrt(W * H) * 0.15));
+  }
+  // Taller screens get more items so they don't look empty.
+  const maxItems = () => Math.round(cfg.max * Math.min(1.8, Math.max(1, H / 800)));
+
+  function balloonSVG(color) {
+    const edge = color === "#ffffff" ? ' stroke="#c9d6e3" stroke-width="2"' : "";
+    return '<svg viewBox="0 0 100 150">' +
+      '<path d="M50 112q-6 10 2 19t-3 18" stroke="#8a8a8a" stroke-width="2" fill="none"/>' +
+      '<path d="M44 104h12l-6 9z" fill="' + color + '"' + edge + "/>" +
+      '<ellipse cx="50" cy="55" rx="40" ry="50" fill="' + color + '"' + edge + "/>" +
+      '<ellipse cx="34" cy="34" rx="8" ry="15" fill="#fff" opacity=".45" transform="rotate(-22 34 34)"/></svg>';
+  }
+
+  function balloon(color, speech, label) {
+    return { html: balloonSVG(color), w: S, h: S * 1.5, color, speech, label, sfx: "pop", popY: 0.37 };
+  }
+  function solidBubble(text, speech, label, sizeMul = 1) {
+    const color = pick(BRIGHT.filter(c => c !== "#ffd60a")); // white text reads badly on yellow
+    const d = S * 1.05 * sizeMul;
+    return {
+      html: '<div class="bubble solid" style="width:100%;height:100%;background:' + color +
+            ";font-size:" + (d * 0.58) + 'px">' + text + "</div>",
+      w: d, h: d, color, speech, label, sfx: "bloop", key: text,
+    };
+  }
+  function soapBubble(emoji, speech, label) {
+    const d = S * 1.15;
+    return {
+      html: '<div class="bubble soap" style="width:100%;height:100%;font-size:' + (d * 0.55) + 'px">' + emoji + "</div>",
+      w: d, h: d, color: pick(BRIGHT), speech, label, sfx: "bloop", key: emoji,
+    };
+  }
+  // A crawling insect (Bugs, Insects, Insect Sounds).
+  function crawler(emoji, speech, label) {
+    const d = S * 0.95;
+    return { html: '<div class="emoji" style="width:100%;height:100%;font-size:' + (d * 0.82) + 'px">' + emoji + "</div>",
+             w: d, h: d, color: pick(BRIGHT), sfx: "bug", key: emoji, speech, label };
+  }
+  // A side-view car drawn facing right, so it can be flipped to face the way it drives.
+  function carSVG(color) {
+    const edge = color === "#ffffff" ? ' stroke="#c9d6e3" stroke-width="2"' : "";
+    return '<svg viewBox="0 0 120 72">' +
+      '<ellipse cx="60" cy="68" rx="50" ry="4" fill="rgba(0,0,0,.12)"/>' +
+      '<path d="M8 50Q6 36 20 34L34 33 46 16Q49 12 55 12H80Q86 12 90 17L102 33Q114 35 114 46V52Q114 56 110 56H12Q8 56 8 50Z" fill="' +
+        color + '"' + edge + "/>" +
+      '<path d="M51 18 43 32H64V18Z M70 18V32H96L86 18Z" fill="#bfe6ff"/>' +
+      '<rect x="107" y="38" width="7" height="6" rx="2" fill="#ffe680"/>' +
+      '<rect x="8" y="38" width="5" height="6" rx="2" fill="#ff5a5a"/>' +
+      '<path d="M20 40H100" stroke="#fff" stroke-width="3" stroke-linecap="round" opacity=".35"/>' +
+      '<circle cx="32" cy="56" r="11" fill="#2b2d42"/><circle cx="32" cy="56" r="5" fill="#c9d6e3"/>' +
+      '<circle cx="90" cy="56" r="11" fill="#2b2d42"/><circle cx="90" cy="56" r="5" fill="#c9d6e3"/></svg>';
+  }
+  function car(color, speech, label) {
+    return { html: carSVG(color), w: S * 1.4, h: S * 0.84, color, speech, label, sfx: "honk" };
+  }
+  // A flag on a little white card.
+  function flagCard(f) {
+    return {
+      html: '<svg viewBox="-3 -3 66 46"><rect x="-3" y="-3" width="66" height="46" rx="5" fill="#fff"/>' +
+            '<svg x="0" y="0" width="60" height="40" viewBox="0 0 60 40">' + f.svg + "</svg></svg>",
+      w: S * 1.45, h: S * 1.01, color: pick(BRIGHT), speech: f.name, label: f.name, sfx: "bloop", key: f.name,
+    };
+  }
+
+  // ================= modes =================
+  const MODES = {
+    balloons: { motion: "float", max: 7, speed: 7, gap: [350, 900],
+      make: () => balloon(pick(BRIGHT)) },
+    race: { motion: "float", max: 9, speed: 5.5, gap: [220, 560], timed: true,
+      make: () => balloon(pick(BRIGHT)) },
+    // Games with a list draw from a shuffled deck (see deck()), so a child sees everything before repeats.
+    // Each deck's key matches the spec.key the item gets, so entries on screen are skipped.
+    bugs: { motion: "crawl", max: 6, gap: [400, 1100],
+      make: deckMaker(INSECTS, e => e, e => crawler(e)) },
+    numbers: { motion: "float", max: 5, speed: 9, gap: [500, 1200],
+      make: deckMaker(() => Array.from({ length: settings.numMax }, (_, i) => String(i + 1)), n => n,
+                      n => solidBubble(n, n, n)) },
+    abc: { motion: "float", max: 5, speed: 9, gap: [500, 1200],
+      make: deckMaker(LETTERS, L => L, L => solidBubble(L, LETTER_SAY[L] || L, L)) },
+    animals: { motion: "float", max: 5, speed: 9, gap: [500, 1200],
+      make: deckMaker(ANIMALS, a => a.e, a => soapBubble(a.e, a.name, cap(a.name))) },
+    sounds: { motion: "float", max: 5, speed: 9, gap: [500, 1200],
+      make: deckMaker(SOUND_ANIMALS, a => a.e, a => soapBubble(a.e, a.sound, cap(a.sound))) },
+    shapes: { motion: "float", max: 5, speed: 9, gap: [500, 1200],
+      make: deckMaker(SHAPES, s => s.name, s => {
+        const color = pick(BRIGHT);
+        return { html: '<svg viewBox="0 0 100 100"><g fill="' + color +
+                       '" stroke="#fff" stroke-width="4" stroke-linejoin="round">' + s.svg + "</g></svg>",
+                 w: S * 1.1, h: S * 1.1, color, speech: s.name, label: cap(s.name), sfx: "bloop", key: s.name };
+      }) },
+    colors: { motion: "float", max: 5, speed: 9, gap: [500, 1200],
+      make: deckMaker(COLORS, c => c.name, c => Object.assign(balloon(c.c, c.name, cap(c.name)), { key: c.name })) },
+
+    // ---- More games ----
+    vehicles: { motion: "float", max: 5, speed: 9, gap: [500, 1200],
+      make: deckMaker(VEHICLES, v => v.e, v => soapBubble(v.e, v.name, cap(v.name))) },
+    // Each car popped counts up: "1, 2, 3…" to the Numbers setting, then a cheer and start again.
+    carcount: { motion: "drive", max: 6, speed: 6, gap: [450, 1000], count: true,
+      make: () => car(pick(BRIGHT)) },
+    carcolors: { motion: "drive", max: 6, speed: 6, gap: [450, 1000],
+      make: deckMaker(COLORS, c => c.name, c => Object.assign(car(c.c, c.name, cap(c.name)), { key: c.name })) },
+    insects: { motion: "crawl", max: 5, gap: [500, 1200],
+      make: deckMaker(BUGS, b => b.e, b => crawler(b.e, b.name, cap(b.name))) },
+    insectsounds: { motion: "crawl", max: 5, gap: [500, 1200],
+      make: deckMaker(SOUND_BUGS, b => b.e, b => crawler(b.e, b.sound, cap(b.sound))) },
+    family: { motion: "float", max: 5, speed: 9, gap: [500, 1200],
+      make: deckMaker(FAMILY, f => f.e, f => soapBubble(f.e, f.name, cap(f.name))) },
+    jobs: { motion: "float", max: 5, speed: 9, gap: [500, 1200],
+      make: deckMaker(JOBS, j => j.e, j => soapBubble(j.e, j.name, cap(j.name))) },
+    flags: { motion: "float", max: 4, speed: 10, gap: [700, 1400],
+      make: deckMaker(FLAGS, f => f.name, flagCard) },
+    capitals: { motion: "float", max: 4, speed: 12, gap: [900, 1700],
+      make: deckMaker(CAPITAL_FLAGS, f => f.name, f => {
+        const c = CAPITALS[f.name];
+        const country = (NEEDS_THE.has(f.name) ? "the " : "") + f.name;
+        // No floating word: the info card shows the flag, the country and the capital instead.
+        return Object.assign(flagCard(f), { speech: "The capital of " + country + " is " + c + "!", label: null,
+                                            info: { svg: f.svg, country: f.name, capital: c } });
+      }) },
+  };
+
+  // ================= game state =================
+  const field = $("#field");
+  let mode = null, cfg = null, items = [], score = 0, timeLeft = 0, raceLen = 60, running = false;
+  let nextSpawn = 0, last = 0, raf = 0, bestKey = "poppop.best.race";
+
+  function makeItem(first) {
+    const spec = cfg.make(); // decks already skip what's on screen, so nothing shows twice at once
+    const el = document.createElement("div");
+    el.className = "item";
+    el.style.width = spec.w + "px";
+    el.style.height = spec.h + "px";
+    el.innerHTML = spec.html;
+    const it = { el, spec, w: spec.w, h: spec.h, t: rand(0, 6), popped: false };
+
+    if (cfg.motion === "float") {
+      it.y = first ? rand(H * 0.35, H) : H + rand(10, 60);
+      it.x = spreadX(it);
+      it.vy = (H / cfg.speed) * rand(0.8, 1.2);
+      it.amp = rand(8, 26); it.freq = rand(0.6, 1.3);
+    } else if (cfg.motion === "drive") {
+      spawnDrive(it, first);
+    } else {
+      // bugs walk in from a random edge
+      const side = (Math.random() * 4) | 0;
+      it.x = side === 0 ? -it.w : side === 1 ? W : rand(0, W - it.w);
+      it.y = side === 2 ? -it.h : side === 3 ? H : rand(80, H - it.h);
+      if (first) { it.x = rand(0, W - it.w); it.y = rand(90, H - it.h); }
+      newHeading(it, true);
+    }
+    el.addEventListener("pointerdown", e => { e.preventDefault(); pop(it); });
+    field.appendChild(el);
+    items.push(it);
+    place(it);
+  }
+
+  // Try a few spots and keep the one furthest from items at a similar height, so they don't bunch up.
+  function spreadX(it) {
+    const near = items.filter(o => Math.abs(o.y - it.y) < Math.max(o.h, it.h) * 1.2);
+    let bestX = 0, bestGap = -1;
+    for (let k = 0; k < 6; k++) {
+      const x = rand(0, Math.max(1, W - it.w));
+      const gap = near.reduce((m, o) => Math.min(m, Math.abs(o.x - x)), Infinity);
+      if (gap > bestGap) { bestGap = gap; bestX = x; }
+    }
+    return bestX;
+  }
+
+  // Cars drive across in lanes, from either side, keeping clear of the lanes already in use.
+  function spawnDrive(it, first) {
+    const dir = Math.random() < 0.5 ? 1 : -1;
+    it.vx = dir * (W / cfg.speed) * rand(0.8, 1.25);
+    it.x = dir > 0 ? -it.w - rand(10, 80) : W + rand(10, 80);
+    if (first) it.x = rand(0, Math.max(1, W - it.w));
+    let bestY = 0, bestGap = -1;
+    for (let k = 0; k < 8; k++) {
+      const y = rand(100, Math.max(101, H - it.h - 20));
+      const gap = items.reduce((m, o) => Math.min(m, Math.abs(o.y - y)), Infinity);
+      if (gap > bestGap) { bestGap = gap; bestY = y; }
+    }
+    it.y = bestY;
+  }
+  /** Moves a car along its lane; false once it has driven off the far side. */
+  function moveDrive(it, dt) {
+    it.x += it.vx * dt;
+    return it.vx > 0 ? it.x < W + 20 : it.x > -it.w - 20;
+  }
+
+  function newHeading(it, aimInside) {
+    const speed = Math.min(W, H) * rand(0.12, 0.25);
+    let ang;
+    if (aimInside) {
+      const tx = rand(W * 0.2, W * 0.8), ty = rand(H * 0.25, H * 0.8);
+      ang = Math.atan2(ty - it.y, tx - it.x);
+    } else ang = rand(0, Math.PI * 2);
+    it.vx = Math.cos(ang) * speed; it.vy = Math.sin(ang) * speed;
+    it.turnAt = rand(1.2, 2.8); it.inside = false;
+  }
+
+  function place(it) {
+    let x = it.x, rot = 0;
+    let y = it.y, flip = "";
+    if (cfg.motion === "float") { x += Math.sin(it.t * it.freq) * it.amp; rot = Math.sin(it.t * it.freq) * 5; }
+    else if (cfg.motion === "drive") {          // a little bounce; the car is drawn facing right
+      y -= Math.abs(Math.sin(it.t * 7)) * 3;
+      if (it.vx < 0) flip = " scaleX(-1)";
+    } else {                                     // insect emoji face left
+      rot = Math.sin(it.t * 9) * 8;
+      if (it.vx > 0) flip = " scaleX(-1)";
+    }
+    it.drawX = x;
+    it.el.style.transform = "translate(" + x + "px," + y + "px) rotate(" + rot + "deg)" + flip;
+  }
+
+  /** Floats an item up; false once it has left the top of the screen. */
+  function moveFloat(it, dt) {
+    it.y -= it.vy * dt;
+    return it.y >= -it.h - 20;
+  }
+  /** Walks an insect about, bouncing off the edges once it is on screen. Insects never leave. */
+  function moveCrawl(it, dt) {
+    it.x += it.vx * dt; it.y += it.vy * dt;
+    const minY = 80, maxX = W - it.w, maxY = H - it.h;
+    if (it.x >= 0 && it.x <= maxX && it.y >= minY && it.y <= maxY) it.inside = true;
+    if (!it.inside) return true;
+    if (it.x < 0 || it.x > maxX) { it.vx *= -1; it.x = Math.max(0, Math.min(maxX, it.x)); }
+    if (it.y < minY || it.y > maxY) { it.vy *= -1; it.y = Math.max(minY, Math.min(maxY, it.y)); }
+    it.turnAt -= dt;
+    if (it.turnAt <= 0) newHeading(it, false);
+    return true;
+  }
+  const MOVERS = { float: moveFloat, drive: moveDrive, crawl: moveCrawl };
+
+  function update(dt) {
+    const move = MOVERS[cfg.motion];
+    for (let i = items.length - 1; i >= 0; i--) {
+      const it = items[i];
+      it.t += dt;
+      if (!move(it, dt)) { it.el.remove(); items.splice(i, 1); continue; }
+      place(it);
+    }
+  }
+
+  function pop(it) {
+    if (it.popped || !running) return;
+    it.popped = true;
+    const s = it.spec;
+    const cx = it.drawX + it.w / 2, cy = it.y + it.h * (s.popY || 0.5);
+
+    let speech = s.speech, label = s.label;
+    if (cfg.count) [speech, label] = nextCount();
+
+    if (settings.sounds) SFX[s.sfx || "pop"]();
+    if (speech) say(speech);
+    burst(cx, cy, s.color);
+    if (label) showWord(label, cx, cy);
+    if (s.info) setTimeout(() => showInfo(s.info, speech), 250); // let the pop and confetti play first
+
+    it.el.classList.add("popping");
+    setTimeout(() => it.el.remove(), 130);
+    items.splice(items.indexOf(it), 1);
+    if (performance.now() + 250 > nextSpawn) nextSpawn = performance.now() + 250;
+
+    score++;
+    const sc = $("#score");
+    sc.textContent = "⭐ " + score;
+    sc.classList.remove("bump"); void sc.offsetWidth; sc.classList.add("bump");
+  }
+
+  // Capitals: pause the game on a card until a grown-up or child taps ▶ or ✕.
+  let infoSpeech = "";
+  function showInfo(info, speech) {
+    if (!$("#game").classList.contains("on")) return;  // left the game during the pop
+    running = false;
+    infoSpeech = speech;
+    $("#infoFlag").innerHTML = '<svg viewBox="0 0 60 40">' + info.svg + "</svg>";
+    $("#infoCountry").textContent = info.country;
+    $("#infoCapital").textContent = info.capital;
+    $("#info").classList.add("on");
+  }
+  function closeInfo() {
+    if (!$("#info").classList.contains("on")) return;
+    $("#info").classList.remove("on");
+    stopSpeech();
+    running = true;
+    last = performance.now();                    // no jump: items carry on from where they stopped
+    nextSpawn = Math.max(nextSpawn, last + 400);
+  }
+
+  // Count Cars: 1, 2, 3… up to the Numbers setting, then a cheer and start again.
+  let counted = 0;
+  function nextCount() {
+    counted = counted % settings.numMax + 1;
+    if (counted < settings.numMax) return [String(counted), String(counted)];
+    if (settings.sounds) setTimeout(SFX.yay, 250);
+    return [counted + " cars! Great counting!", String(counted)];
+  }
+
+  function burst(x, y, color) {
+    for (let i = 0; i < 12; i++) {
+      const b = document.createElement("div"), a = (i / 12) * Math.PI * 2 + rand(-0.2, 0.2), d = rand(50, 110), sz = rand(10, 20);
+      b.className = "bit";
+      b.style.cssText = "left:" + (x - sz / 2) + "px;top:" + (y - sz / 2) + "px;width:" + sz + "px;height:" + sz +
+        "px;background:" + (i % 3 === 0 ? "#fff" : color) + ";--dx:" + Math.cos(a) * d + "px;--dy:" + Math.sin(a) * d + "px";
+      field.appendChild(b);
+      setTimeout(() => b.remove(), 650);
+    }
+  }
+
+  function showWord(text, x, y) {
+    field.querySelectorAll(".word").forEach(w => w.remove());
+    const w = document.createElement("div");
+    w.className = "word";
+    w.textContent = text;
+    if (text.length <= 2) w.style.fontSize = "clamp(80px, 20vw, 200px)"; // a lone "7" or "B" needs to be bigger
+    w.style.left = Math.max(110, Math.min(W - 110, x)) + "px";
+    w.style.top = Math.max(110, Math.min(H - 60, y)) + "px";
+    field.appendChild(w);
+    setTimeout(() => w.remove(), 1550);
+  }
+
+  function loop(now) {
+    const dt = Math.min((now - last) / 1000, 0.05);
+    last = now;
+    if (running) {
+      update(dt);
+      if (items.length < maxItems() && now >= nextSpawn) {
+        makeItem(false);
+        nextSpawn = now + rand(cfg.gap[0], cfg.gap[1]);
+      }
+      if (cfg.timed) {
+        timeLeft -= dt;
+        $("#timebar").style.transform = "scaleX(" + Math.max(0, timeLeft / raceLen) + ")";
+        if (timeLeft <= 0) endRace();
+      }
+    }
+    raf = requestAnimationFrame(loop);
+  }
+
+  // ================= screens =================
+  function show(id) {
+    document.querySelectorAll(".screen").forEach(s => s.classList.toggle("on", s.id === id));
+  }
+
+  function start(m) {
+    audio(); // unlock sound on this first tap
+    mode = m; cfg = MODES[m];
+    measure();
+    clear();
+    score = 0;
+    $("#score").textContent = "⭐ 0";
+    $("#end").classList.remove("on");
+    $("#info").classList.remove("on");
+    const timed = !!cfg.timed;
+    $("#timebar").style.display = timed ? "block" : "none";
+    $("#timebar").style.transform = "scaleX(1)";
+    $("#best").style.display = timed ? "block" : "none";
+    $("#best").textContent = "🏆 " + (Number(store(bestKey)) || 0);
+    raceLen = settings.race;
+    timeLeft = cfg.timed ? raceLen : 0;
+    counted = 0;
+    show("game");
+    Music.scene("game", m);
+    running = true;
+    const firstBatch = cfg.motion === "crawl" ? 3 : Math.ceil(maxItems() / 2);
+    for (let i = 0; i < firstBatch; i++) makeItem(true);
+    last = performance.now();
+    nextSpawn = last + 600;
+    cancelAnimationFrame(raf);
+    raf = requestAnimationFrame(loop);
+  }
+
+  function clear() {
+    items.forEach(it => it.el.remove());
+    items = [];
+    field.innerHTML = "";
+  }
+
+  function endRace() {
+    running = false;
+    items.forEach(it => { it.el.classList.add("popping"); });
+    setTimeout(clear, 200);
+    const best = Number(store(bestKey)) || 0;
+    const isBest = score > best;
+    if (isBest) store(bestKey, String(score));
+    $("#endStar").textContent = isBest ? "🏆" : "⭐";
+    $("#endScore").textContent = score;
+    $("#endMsg").textContent = isBest ? "New best score!" : "Best: " + best;
+    $("#best").textContent = "🏆 " + Math.max(best, score);
+    $("#end").classList.add("on");
+    if (settings.sounds) SFX.yay();
+    say(isBest ? "Wow! New best score! " + score + "!" : "Great job! You popped " + score + " balloons!");
+  }
+
+  function goHome() {
+    running = false;
+    cancelAnimationFrame(raf);
+    stopSpeech();
+    clear();
+    $("#end").classList.remove("on");
+    $("#info").classList.remove("on");
+    refreshMenu();
+    show(homeScreen);                            // back to the menu page the game was started from
+    Music.scene("menu");
+  }
+
+  function refreshMenu() {
+    const best = Number(store(bestKey)) || 0;
+    const len = settings.race >= 60 ? (settings.race / 60) + " min" : settings.race + " sec";
+    $("#menuBest").textContent = best ? "🏆 Best: " + best : len;
+    $("#hint").textContent = (settings.homeTap ? "tap 🏠" : "press and hold 🏠") +
+      (bridge ? " or use the phone's Back button" : "");
+  }
+
+  function renderSettings() {
+    document.querySelectorAll(".seg").forEach(seg => {
+      seg.querySelectorAll("button").forEach(b =>
+        b.classList.toggle("on", Number(b.dataset.v) === Number(settings[seg.dataset.key])));
+    });
+    $("#setBest").textContent = Number(store(bestKey)) || 0;
+    $("#musicVol").value = settings.musicVol;
+    $("#musicPct").textContent = settings.musicVol ? settings.musicVol + "%" : "Off";
+  }
+  function openSettings() { renderSettings(); show("settings"); }
+  function closeSettings() { refreshMenu(); show("menu"); }
+
+  // Called by the Android app when the phone's Back button is pressed.
+  window.appBack = () => {
+    if ($("#confirm").classList.contains("on")) { closeExit(); return "stay"; }  // Back again = "No, keep playing"
+    if ($("#info").classList.contains("on")) { closeInfo(); return "stay"; }  // Back closes the capital card first
+    if ($("#game").classList.contains("on")) { goHome(); return "stay"; }
+    if ($("#settings").classList.contains("on")) { closeSettings(); return "stay"; }
+    if ($("#more").classList.contains("on")) { homeScreen = "menu"; show("menu"); return "stay"; }
+    openExit();                                  // on the main menu, ask before closing the app
+    return "stay";
+  };
+
+  // ================= exit =================
+  function openExit() {
+    $("#confirmMsg").textContent = "Close Pop Pop Play?";
+    $("#confirmYes").style.display = "";
+    $("#confirm").classList.add("on");
+  }
+  function closeExit() { $("#confirm").classList.remove("on"); }
+  function exitApp() {
+    stopSpeech();
+    Music.stop();
+    if (bridge && bridge.exit) { bridge.exit(); return; }
+    // A browser only lets a page close a tab it opened itself, so say what to do if it stays open.
+    window.close();
+    setTimeout(() => {
+      $("#confirmMsg").textContent = "You can close this browser tab now.";
+      $("#confirmYes").style.display = "none";
+      $("#confirmNo").textContent = "Keep playing";
+    }, 300);
+  }
+
+  // ================= wiring =================
+  let homeScreen = "menu";                       // "menu" or "more": where the 🏠 button goes back to
+  document.querySelectorAll(".tile").forEach(t =>
+    t.addEventListener("click", () => { homeScreen = t.closest(".screen").id; start(t.dataset.mode); }));
+  $("#moreBtn").addEventListener("click", () => { homeScreen = "more"; show("more"); });
+  $("#moreBack").addEventListener("click", () => { homeScreen = "menu"; show("menu"); });
+
+  // Hold-to-exit so little fingers don't leave the game by accident.
+  const home = $("#home");
+  let holdTimer = 0;
+  home.addEventListener("pointerdown", e => {
+    e.preventDefault();
+    if (settings.homeTap) { goHome(); return; }
+    home.classList.add("holding");
+    holdTimer = setTimeout(() => { home.classList.remove("holding"); goHome(); }, 1200);
+  });
+  ["pointerup", "pointerleave", "pointercancel"].forEach(ev =>
+    home.addEventListener(ev, () => { clearTimeout(holdTimer); home.classList.remove("holding"); }));
+
+  $("#again").addEventListener("click", () => start(mode));
+  $("#endhome").addEventListener("click", goHome);
+  $("#infoGo").addEventListener("click", closeInfo);
+  $("#infoClose").addEventListener("click", closeInfo);
+  $("#infoSay").addEventListener("click", () => say(infoSpeech));
+
+  $("#gear").addEventListener("click", openSettings);
+  $("#exitBtn").addEventListener("click", openExit);
+  $("#confirmNo").addEventListener("click", () => {
+    closeExit();
+    $("#confirmNo").textContent = "No, keep playing";
+    if (settings.musicVol) Music.start();        // in a browser, Yes stopped the music before the tab stayed open
+  });
+  $("#confirmYes").addEventListener("click", exitApp);
+  $("#setDone").addEventListener("click", closeSettings);
+  document.querySelectorAll(".seg").forEach(seg => seg.addEventListener("click", e => {
+    const b = e.target.closest("button");
+    if (!b) return;
+    settings[seg.dataset.key] = Number(b.dataset.v);
+    saveSettings();
+    renderSettings();
+  }));
+  // Music volume slider: changes are heard straight away while dragging.
+  const musicVol = $("#musicVol");
+  musicVol.addEventListener("input", () => {
+    settings.musicVol = Number(musicVol.value);
+    $("#musicPct").textContent = settings.musicVol ? settings.musicVol + "%" : "Off";
+    audio();
+    Music.setVolume();
+  });
+  musicVol.addEventListener("change", saveSettings);
+  $("#resetBest").addEventListener("click", () => {
+    if (confirm("Reset the best race score to 0?")) { store(bestKey, "0"); renderSettings(); }
+  });
+
+  const fsBtn = $("#fs");
+  const root = document.documentElement;
+  // The Android app is already full screen.
+  if (bridge || (!root.requestFullscreen && !root.webkitRequestFullscreen)) fsBtn.style.display = "none";
+  // Opened from the iPhone/iPad home screen: already full screen, and iOS apps have no "close",
+  // so the 🚪 button could only show "close this tab". Swipe up to leave instead.
+  const homeScreenApp = !bridge && (navigator.standalone || matchMedia("(display-mode: standalone)").matches);
+  if (homeScreenApp) { fsBtn.style.display = "none"; $("#exitBtn").style.display = "none"; }
+  fsBtn.addEventListener("click", () => {
+    if (document.fullscreenElement || document.webkitFullscreenElement) {
+      (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+    } else {
+      (root.requestFullscreen || root.webkitRequestFullscreen).call(root);
+    }
+  });
+
+  addEventListener("keydown", e => { if (e.key === "Escape") window.appBack(); });
+  addEventListener("resize", () => {
+    measure();
+    items.forEach(it => { it.x = Math.min(it.x, Math.max(0, W - it.w)); });
+  });
+  // Browsers only allow sound after a tap. On touch screens a finger going down doesn't count,
+  // only lifting it does, so listen to all of these. Music.start() does nothing once playing.
+  const unlockSound = () => { audio(); Music.start(); };
+  ["pointerup", "touchend", "click", "keydown"].forEach(ev =>
+    document.addEventListener(ev, unlockSound, { passive: true }));
+  if (bridge) Music.start(); // the Android app allows sound straight away
+
+  // Silence everything while the app is in the background. The Android app calls these too.
+  window.appPause = () => { stopSpeech(); if (ac) ac.suspend(); };
+  window.appResume = () => { if (ac) ac.resume(); last = performance.now(); };
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) window.appPause(); else window.appResume();
+  });
+
+  const meta = n => (document.querySelector('meta[name="' + n + '"]') || {}).content || "";
+  $("#ver").textContent = "Pop Pop Play " + meta("app-version");
+  $("#vtag").textContent = "v" + meta("app-version");
+  document.title = "Pop Pop Play v" + meta("app-version");
+  document.addEventListener("contextmenu", e => e.preventDefault());
+  document.addEventListener("gesturestart", e => e.preventDefault());
+  document.addEventListener("dblclick", e => e.preventDefault());
+
+  refreshMenu();
+})();
+</script>
+<script>
+  // Keeps the game on the device so it works offline after the first visit.
+  if ("serviceWorker" in navigator) addEventListener("load", () => navigator.serviceWorker.register("sw.js"));
+</script>
+</body>
+</html>
